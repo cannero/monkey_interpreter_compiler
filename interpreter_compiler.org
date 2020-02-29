@@ -10,3 +10,5 @@
 itertools::put_back or peeking_take_while would allow to make the check for the second = in the match
 and reverse the next() if there is no equal sign
 
+* Todo
+** TODO nightly not required

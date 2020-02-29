@@ -5,12 +5,12 @@ fn is_identifier(ch: char) -> bool {
     ch.is_alphabetic() || ch == '_'
 }
 
-struct Lexer<'a> {
+pub struct Lexer<'a> {
     input: Peekable<Chars<'a>>,
 }
 
 impl Lexer<'_> {
-    fn new(input: &str) -> Lexer {
+    pub fn new(input: &str) -> Lexer {
         Lexer {
             input: input.chars().peekable(),
         }
@@ -44,7 +44,7 @@ impl Lexer<'_> {
     }
 
     fn tokenize_identifier(&mut self) -> Token {
-        let identifier = self.read_string(|c| is_identifier(c));
+        let identifier = self.read_string(is_identifier);
         match identifier.as_ref() {
             "let" => Token::Let,
             "fn" => Token::Function,
@@ -109,9 +109,22 @@ impl Lexer<'_> {
                 '<' => Token::LessThan,
                 '>' => Token::GreaterThan,
                 ',' => Token::Comma,
-                ch @ _ => Token::Illegal(ch),
+                ch => Token::Illegal(ch),
             },
             None => Token::EndOfFile,
+        }
+    }
+}
+
+impl Iterator for Lexer<'_> {
+    type Item = Token;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let tok = self.next_token();
+        if tok == Token::EndOfFile {
+            None
+        } else {
+            Some(tok)
         }
     }
 }

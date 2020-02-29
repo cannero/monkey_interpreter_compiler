@@ -3,6 +3,9 @@
 [[package]]
 name = "interpreter"
 version = "0.1.0"
+dependencies = [
+ "libinterpreter 0.1.0",
+]
 
 [[package]]
 name = "libinterpreter"
