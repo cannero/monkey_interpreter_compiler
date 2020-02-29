@@ -1,0 +1,12 @@
+* commands
+- rustup override set nightly
+  nightly-x86_64-pc-windows-msvc (directory override for '\\?\C:\progra\rust\monkey\interpreter_compiler')nightly-x86_64-pc-windows-msvc (directory override for '\\?\C:\progra\rust\monkey\interpreter_compiler')
+  tried to use for #![feature(let_chains)], while (let Some(&ch) = self.peek()) && is_identifier(ch)
+  did not get it to work
+
+* lexer
+** Improvements
+*** next_token
+itertools::put_back or peeking_take_while would allow to make the check for the second = in the match
+and reverse the next() if there is no equal sign
+
