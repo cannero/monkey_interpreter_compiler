@@ -66,7 +66,7 @@ impl Lexer<'_> {
         }
     }
 
-    fn next_token(&mut self) -> Token {
+    pub fn next_token(&mut self) -> Token {
         self.skip_whitespace();
         match self.peek() {
             Some(&c) => match c {

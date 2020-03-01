@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Token {
     Illegal(char),
     EndOfFile,
@@ -31,4 +31,10 @@ pub enum Token {
     If,
     Else,
     Return,
+}
+
+impl Token {
+    pub fn dummy_ident() -> Token {
+        Token::Ident("<>".to_string())
+    }
 }
