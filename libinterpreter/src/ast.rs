@@ -19,10 +19,17 @@ impl Program {
 }
 
 #[derive(PartialEq, Debug)]
-pub struct Ident(pub String);
-
-#[derive(PartialEq, Debug)]
 pub enum Statement {
     None,
     Let(Ident),
+    Return,
+    Expression(Expression),
+}
+
+#[derive(PartialEq, Debug)]
+pub struct Ident(pub String);
+
+#[derive(PartialEq, Debug)]
+pub enum Expression {
+    Ident(Ident),
 }
