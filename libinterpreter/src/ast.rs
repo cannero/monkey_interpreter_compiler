@@ -26,10 +26,31 @@ pub enum Statement {
     Expression(Expression),
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Ident(pub String);
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Ident(Ident),
+    Integer(u64),
+    Prefix(Prefix, Box<Expression>),
+    Infix(Box<Expression>, Infix, Box<Expression>),
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum Prefix {
+    Minus,
+    Bang,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum Infix {
+    Plus,
+    Minus,
+    Asterisk,
+    Slash,
+    LessThan,
+    GreaterThan,
+    Equal,
+    NotEqual,
 }
