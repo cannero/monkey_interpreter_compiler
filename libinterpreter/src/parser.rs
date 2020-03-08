@@ -1,5 +1,7 @@
 use crate::{
-    ast::{Expression, Ident, Infix, Prefix, Program, Statement},
+    ast::{
+        BlockStatement, Expression, Ident, Identifiers, Infix, Literal, Prefix, Program, Statement,
+    },
     lexer::Lexer,
     token::Token,
 };
@@ -72,8 +74,8 @@ impl Parser<'_> {
     }
 
     fn parse_let_statement(&mut self) -> Statement {
-        let identifier = match self.peek_token.clone() {
-            Token::Ident(id) => id,
+        let identifier = match &self.peek_token {
+            Token::Ident(id) => id.clone(),
             _ => {
                 self.peek_error(Token::dummy_ident());
                 return Statement::None;
@@ -115,12 +117,17 @@ impl Parser<'_> {
     }
 
     fn parse_expression(&mut self, precedence: Precedence) -> ExpressionResult {
-        let mut left_expression = match self.current_token.clone() {
-            Token::Ident(id) => Expression::Ident(Ident(id)),
-            Token::Integer(i) => Expression::Integer(i),
-            Token::Bang => self.parse_prefix()?,
-            Token::Minus => self.parse_prefix()?,
-            _ => return self.expression_error("left expression"),
+        let mut left_expression = match &self.current_token {
+            Token::Ident(id) => Expression::Ident(Ident(id.clone())),
+            Token::Integer(i) => Expression::Literal(Literal::Integer(*i)),
+            t @ Token::False | t @ Token::True => {
+                Expression::Literal(Literal::Bool(t == &Token::True))
+            }
+            Token::LParen => self.parse_grouped_expression()?,
+            Token::Bang | Token::Minus => self.parse_prefix()?,
+            Token::If => self.parse_if_expression()?,
+            Token::Function => self.parse_fn_expression()?,
+            _ => return self.expression_error("expression"),
         };
 
         while self.peek_token != Token::SemiColon && precedence < self.peek_precedence() {
@@ -147,8 +154,8 @@ impl Parser<'_> {
     }
 
     fn parse_identifier(&mut self) -> ExpressionResult {
-        match self.current_token.clone() {
-            Token::Ident(id) => Ok(Expression::Ident(Ident(id))),
+        match &self.current_token {
+            Token::Ident(id) => Ok(Expression::Ident(Ident(id.clone()))),
             _ => self.expression_error("identifier"),
         }
     }
@@ -165,6 +172,20 @@ impl Parser<'_> {
             Ok(Expression::Prefix(prefix, Box::new(expression)))
         } else {
             self.expression_error("prefix expression")
+        }
+    }
+
+    fn parse_grouped_expression(&mut self) -> ExpressionResult {
+        self.next_token();
+
+        if let Ok(expression) = self.parse_expression(Precedence::Lowest) {
+            if !self.expect_peek(Token::RParen) {
+                self.expression_error("missing RParen grouped expression")
+            } else {
+                Ok(expression)
+            }
+        } else {
+            self.expression_error("grouped expression")
         }
     }
 
@@ -194,9 +215,97 @@ impl Parser<'_> {
         }
     }
 
+    fn parse_if_expression(&mut self) -> ExpressionResult {
+        if !self.expect_peek(Token::LParen) {
+            return self.expression_error("if lparen");
+        }
+        self.next_token();
+        let condition = Box::new(self.parse_expression(Precedence::Lowest)?);
+
+        if !self.expect_peek(Token::RParen) {
+            return self.expression_error("if rparen");
+        }
+        if !self.expect_peek(Token::LBrace) {
+            return self.expression_error("if lbrace");
+        }
+
+        let consequence = self.parse_block_statement();
+
+        let alternative = if self.peek_token == Token::Else {
+            self.next_token();
+            if !self.expect_peek(Token::LBrace) {
+                return self.expression_error("else lbrace");
+            }
+            Some(self.parse_block_statement())
+        } else {
+            None
+        };
+
+        Ok(Expression::If {
+            condition,
+            consequence,
+            alternative,
+        })
+    }
+
+    fn parse_fn_expression(&mut self) -> ExpressionResult {
+        if !self.expect_peek(Token::LParen) {
+            return self.expression_error("fn lparen");
+        }
+
+        let parameters = self.parse_parameters();
+
+        if !self.expect_peek(Token::LBrace) {
+            return self.expression_error("fn lbrace");
+        }
+
+        let body = self.parse_block_statement();
+
+        Ok(Expression::Function { parameters, body })
+    }
+
+    fn parse_parameters(&mut self) -> Identifiers {
+        let mut identifiers = vec![];
+
+        if self.peek_token == Token::RParen {
+            self.next_token();
+            return identifiers;
+        }
+
+        loop {
+            self.next_token();
+            match &self.current_token {
+                Token::Ident(id) => identifiers.push(Ident(id.clone())),
+                _ => (),
+            }
+            if self.peek_token != Token::Comma {
+                break;
+            }
+            self.next_token();
+        }
+
+        if !self.expect_peek(Token::RParen) {
+            vec![]
+        } else {
+            identifiers
+        }
+    }
+
+    fn parse_block_statement(&mut self) -> BlockStatement {
+        self.next_token();
+        let mut result = vec![];
+        while self.current_token != Token::RBrace && self.current_token != Token::EndOfFile {
+            match self.parse_statement() {
+                Statement::None => (),
+                stmt => result.push(stmt),
+            }
+            self.next_token();
+        }
+        result
+    }
+
     fn next_token(&mut self) {
-        self.current_token = self.peek_token.clone();
-        self.peek_token = self.lexer.next_token();
+        self.current_token = std::mem::replace(&mut self.peek_token, self.lexer.next_token());
     }
 
     fn expect_peek(&mut self, token: Token) -> bool {
@@ -243,6 +352,12 @@ impl Parser<'_> {
 mod tests {
     use super::*;
 
+    macro_rules! ident {
+        ($literal:expr) => {
+            Ident($literal.to_string())
+        };
+    }
+
     macro_rules! let_stmt {
         ($literal:expr) => {
             Statement::Let(Ident($literal.to_string()))
@@ -257,19 +372,55 @@ mod tests {
 
     macro_rules! ident_expr {
         ($literal:expr) => {
-            Expression::Ident(Ident($literal.to_string()))
+            Expression::Ident(ident!($literal))
+        };
+    }
+
+    macro_rules! boolean_expr {
+        ($bool:expr) => {
+            Expression::Literal(Literal::Bool($bool))
         };
     }
 
     macro_rules! integer_expr {
         ($integer:expr) => {
-            Expression::Integer($integer)
+            Expression::Literal(Literal::Integer($integer))
         };
     }
 
     macro_rules! infix_expr {
         ($expr_left:expr, $infix:expr, $expr_right:expr) => {
             Expression::Infix(Box::new($expr_left), $infix, Box::new($expr_right))
+        };
+    }
+
+    macro_rules! if_expr {
+        ($condition:expr, $consequence:expr, $alternative:expr) => {
+            Expression::If {
+                condition: Box::new($condition),
+                consequence: block_stmt!($consequence),
+                alternative: if let Some(alt) = $alternative {
+                    Some(block_stmt!(alt))
+                } else {
+                    None
+                },
+            }
+        };
+    }
+
+    macro_rules! fn_expr {
+        ($parameters:expr, $body:expr) => {
+            Expression::Function {
+                parameters: $parameters,
+                body: block_stmt!($body),
+            }
+        };
+    }
+
+    //TODO: possibility to add more statements
+    macro_rules! block_stmt {
+        ($expr:expr) => {
+            vec![Statement::Expression($expr)]
         };
     }
 
@@ -281,7 +432,13 @@ mod tests {
 
     macro_rules! integer_expr_stmt {
         ($literal:expr) => {
-            Statement::Expression(Expression::Integer($literal))
+            Statement::Expression(integer_expr!($literal))
+        };
+    }
+
+    macro_rules! boolean_expr_stmt {
+        ($bool:expr) => {
+            Statement::Expression(boolean_expr!($bool))
         };
     }
 
@@ -297,6 +454,18 @@ mod tests {
         };
     }
 
+    macro_rules! if_expr_stmt {
+        ($condition:expr, $consequence:expr, $alternative:expr) => {
+            Statement::Expression(if_expr!($condition, $consequence, $alternative))
+        };
+    }
+
+    macro_rules! fn_expr_stmt {
+        ($parameters:expr, $body:expr) => {
+            Statement::Expression(fn_expr!($parameters, $body))
+        };
+    }
+
     fn assert_no_errors(parser: Parser) {
         assert!(parser.errors().len() == 0, "{:?}", parser.errors());
     }
@@ -308,11 +477,11 @@ mod tests {
         let program = parser.parse();
         let statements = program.statements();
 
+        assert_no_errors(parser);
         assert_eq!(statements.len(), expected.len());
         for (i, stmt) in expected.iter().enumerate() {
             assert_eq!(&statements[i], stmt);
         }
-        assert_no_errors(parser);
     }
 
     #[test]
@@ -337,7 +506,7 @@ let foobar = 838383;
         let mut parser = Parser::new(lexer);
 
         parser.parse();
-        assert!(parser.errors().len() == 2, parser.errors().connect(":"));
+        assert!(parser.errors().len() == 2, parser.errors().join(":"));
     }
 
     #[test]
@@ -370,8 +539,8 @@ return x+y;
     #[test]
     fn test_prefix_expression_statement() {
         let expected_statements = vec![
-            prefix_expr_stmt!(Prefix::Bang, Box::new(Expression::Integer(5))),
-            prefix_expr_stmt!(Prefix::Minus, Box::new(Expression::Integer(15))),
+            prefix_expr_stmt!(Prefix::Bang, Box::new(integer_expr!(5))),
+            prefix_expr_stmt!(Prefix::Minus, Box::new(integer_expr!(15))),
         ];
         let input = "
 !5;
@@ -391,6 +560,22 @@ return x+y;
 5 + 5;
 5 - 5;
 ";
+
+        assert_statements(expected_statements, input);
+    }
+
+    #[test]
+    fn test_expression_with_boolean_statement() {
+        let expected_statements = vec![
+            boolean_expr_stmt!(true),
+            infix_expr_stmt!(
+                infix_expr!(integer_expr!(3), Infix::LessThan, integer_expr!(5)),
+                Infix::NotEqual,
+                boolean_expr!(false)
+            ),
+        ];
+        let input = "true;
+3 < 5 != false";
 
         assert_statements(expected_statements, input);
     }
@@ -428,6 +613,87 @@ return x+y;
         let input = "
 a + b * c + d / e - f;
 3 + 4 * 5 == 3 * 1 + 4 * 5;
+";
+
+        assert_statements(expected_statements, input);
+    }
+
+    #[test]
+    fn test_grouped_expression_parsing() {
+        let expected_statements = vec![
+            infix_expr_stmt!(
+                ident_expr!("a"),
+                Infix::Minus,
+                infix_expr!(ident_expr!("b"), Infix::Slash, ident_expr!("c"))
+            ),
+            infix_expr_stmt!(
+                infix_expr!(ident_expr!("a"), Infix::Minus, ident_expr!("b")),
+                Infix::Slash,
+                ident_expr!("c")
+            ),
+        ];
+
+        let input = "
+a - b / c;
+(a - b) / c;
+";
+
+        assert_statements(expected_statements, input);
+    }
+
+    #[test]
+    fn test_if_expression() {
+        let expected_statements = vec![if_expr_stmt!(
+            infix_expr!(ident_expr!("x"), Infix::LessThan, ident_expr!("y")),
+            ident_expr!("x"),
+            None
+        )];
+
+        let input = "
+if (x < y){
+    x
+}
+";
+
+        assert_statements(expected_statements, input);
+    }
+
+    #[test]
+    fn test_if_else_expression() {
+        let expected_statements = vec![if_expr_stmt!(
+            infix_expr!(ident_expr!("x"), Infix::LessThan, ident_expr!("y")),
+            ident_expr!("x"),
+            Some(ident_expr!("y"))
+        )];
+
+        let input = "
+if (x < y){
+    x
+} else {
+    y
+}
+";
+
+        assert_statements(expected_statements, input);
+    }
+
+    #[test]
+    fn test_fn_expression() {
+        let expected_statements = vec![
+            fn_expr_stmt!(vec![], ident_expr!("x")),
+            fn_expr_stmt!(
+                vec![ident!("x"), ident!("y")],
+                infix_expr!(ident_expr!("x"), Infix::Plus, ident_expr!("y"))
+            ),
+        ];
+
+        let input = "
+fn (){
+    x;
+}
+fn (x,y){
+    x+y;
+}
 ";
 
         assert_statements(expected_statements, input);

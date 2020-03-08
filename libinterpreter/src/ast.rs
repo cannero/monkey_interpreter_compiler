@@ -18,7 +18,9 @@ impl Program {
     }
 }
 
-#[derive(PartialEq, Debug)]
+pub type BlockStatement = Vec<Statement>;
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
     None,
     Let(Ident),
@@ -29,12 +31,23 @@ pub enum Statement {
 #[derive(PartialEq, Debug, Clone)]
 pub struct Ident(pub String);
 
+pub type Identifiers = Vec<Ident>;
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Ident(Ident),
-    Integer(u64),
+    Literal(Literal),
     Prefix(Prefix, Box<Expression>),
     Infix(Box<Expression>, Infix, Box<Expression>),
+    If {
+        condition: Box<Expression>,
+        consequence: BlockStatement,
+        alternative: Option<BlockStatement>,
+    },
+    Function {
+        parameters: Identifiers,
+        body: BlockStatement,
+    },
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -53,4 +66,10 @@ pub enum Infix {
     GreaterThan,
     Equal,
     NotEqual,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum Literal {
+    Integer(u64),
+    Bool(bool),
 }
