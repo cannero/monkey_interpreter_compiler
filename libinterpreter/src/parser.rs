@@ -1,6 +1,7 @@
 use crate::{
     ast::{
-        BlockStatement, Expression, Ident, Identifiers, Infix, Literal, Prefix, Program, Statement,
+        Arguments, BlockStatement, Expression, Ident, Identifiers, Infix, Literal, Prefix, Program,
+        Statement,
     },
     lexer::Lexer,
     token::Token,
@@ -33,6 +34,7 @@ fn get_precedence(token: &Token) -> Precedence {
 }
 
 type ExpressionResult = Result<Expression, ()>;
+type StatementResult = Result<Statement, ()>;
 
 struct Parser<'a> {
     lexer: Lexer<'a>,
@@ -57,15 +59,15 @@ impl Parser<'_> {
         let mut program = Program::new();
         while self.current_token != Token::EndOfFile {
             match self.parse_statement() {
-                Statement::None => (),
-                stmt => program.push(stmt),
+                Err(_) => (),
+                Ok(stmt) => program.push(stmt),
             }
             self.next_token();
         }
         program
     }
 
-    fn parse_statement(&mut self) -> Statement {
+    fn parse_statement(&mut self) -> StatementResult {
         match self.current_token {
             Token::Let => self.parse_let_statement(),
             Token::Return => self.parse_return_statement(),
@@ -73,36 +75,41 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_let_statement(&mut self) -> Statement {
+    fn parse_let_statement(&mut self) -> StatementResult {
         let identifier = match &self.peek_token {
             Token::Ident(id) => id.clone(),
             _ => {
                 self.peek_error(Token::dummy_ident());
-                return Statement::None;
+                return Err(());
             }
         };
         self.next_token();
 
         if !self.expect_peek(Token::Assign) {
-            return Statement::None;
+            return Err(());
         }
-
-        while self.current_token != Token::SemiColon {
-            self.next_token();
-        }
-        Statement::Let(Ident(identifier))
-    }
-
-    fn parse_return_statement(&mut self) -> Statement {
         self.next_token();
 
-        while self.current_token != Token::SemiColon {
+        let expression = self.parse_expression(Precedence::Lowest)?;
+
+        if self.peek_token == Token::SemiColon {
             self.next_token();
         }
-        Statement::Return
+        Ok(Statement::Let(Ident(identifier), expression))
     }
 
-    fn parse_expression_statement(&mut self) -> Statement {
+    fn parse_return_statement(&mut self) -> StatementResult {
+        self.next_token();
+
+        let expression = self.parse_expression(Precedence::Lowest)?;
+
+        if self.peek_token == Token::SemiColon {
+            self.next_token();
+        }
+        Ok(Statement::Return(expression))
+    }
+
+    fn parse_expression_statement(&mut self) -> StatementResult {
         let expression = self.parse_expression(Precedence::Lowest);
 
         if self.peek_token == Token::SemiColon {
@@ -110,9 +117,9 @@ impl Parser<'_> {
         }
 
         if let Ok(expression) = expression {
-            Statement::Expression(expression)
+            Ok(Statement::Expression(expression))
         } else {
-            Statement::None
+            Err(())
         }
     }
 
@@ -131,7 +138,7 @@ impl Parser<'_> {
         };
 
         while self.peek_token != Token::SemiColon && precedence < self.peek_precedence() {
-            match self.peek_token {
+            let expression = match self.peek_token {
                 Token::Plus
                 | Token::Minus
                 | Token::Asterisk
@@ -141,14 +148,15 @@ impl Parser<'_> {
                 | Token::GreaterThan
                 | Token::LessThan => {
                     self.next_token();
-                    if let Ok(expression) = self.parse_infix(left_expression.clone()) {
-                        left_expression = expression;
-                    } else {
-                        return Ok(left_expression);
-                    }
+                    self.parse_infix(left_expression.clone())?
                 }
-                _ => return Ok(left_expression),
-            }
+                Token::LParen => {
+                    self.next_token();
+                    self.parse_call_expression(left_expression.clone())?
+                }
+                _ => self.expression_error("unknown left expression")?,
+            };
+            left_expression = expression;
         }
         Ok(left_expression)
     }
@@ -296,12 +304,46 @@ impl Parser<'_> {
         let mut result = vec![];
         while self.current_token != Token::RBrace && self.current_token != Token::EndOfFile {
             match self.parse_statement() {
-                Statement::None => (),
-                stmt => result.push(stmt),
+                Err(_) => (),
+                Ok(stmt) => result.push(stmt),
             }
             self.next_token();
         }
         result
+    }
+
+    fn parse_call_expression(&mut self, function: Expression) -> ExpressionResult {
+        Ok(Expression::Call {
+            function: Box::new(function),
+            arguments: self.parse_arguments(),
+        })
+    }
+
+    //TODO: combine with parse_parameters
+    fn parse_arguments(&mut self) -> Arguments {
+        let mut arguments = vec![];
+
+        if self.peek_token == Token::RParen {
+            self.next_token();
+            return arguments;
+        }
+        loop {
+            self.next_token();
+            match self.parse_expression(Precedence::Lowest) {
+                Ok(expression) => arguments.push(expression),
+                _ => (),
+            }
+            if self.peek_token != Token::Comma {
+                break;
+            }
+            self.next_token();
+        }
+
+        if !self.expect_peek(Token::RParen) {
+            vec![]
+        } else {
+            arguments
+        }
     }
 
     fn next_token(&mut self) {
@@ -359,14 +401,14 @@ mod tests {
     }
 
     macro_rules! let_stmt {
-        ($literal:expr) => {
-            Statement::Let(Ident($literal.to_string()))
+        ($literal:expr, $expr:expr) => {
+            Statement::Let(ident!($literal), $expr)
         };
     }
 
     macro_rules! ret_stmt {
-        () => {
-            Statement::Return
+        ($expr:expr) => {
+            Statement::Return($expr)
         };
     }
 
@@ -409,18 +451,26 @@ mod tests {
     }
 
     macro_rules! fn_expr {
-        ($parameters:expr, $body:expr) => {
+        ($parameters:expr, $($body:expr),*) => {
             Expression::Function {
                 parameters: $parameters,
-                body: block_stmt!($body),
+                body: block_stmt!($($body),*),
             }
         };
     }
 
-    //TODO: possibility to add more statements
+    macro_rules! call_expr {
+        ($function:expr, $($argument:expr),*) => {
+            Expression::Call {
+                function: Box::new($function),
+                arguments: vec![$($argument),*],
+            }
+        };
+    }
+
     macro_rules! block_stmt {
-        ($expr:expr) => {
-            vec![Statement::Expression($expr)]
+        ($($expr:expr),*) => {
+            vec![$(Statement::Expression($expr)),*]
         };
     }
 
@@ -461,8 +511,8 @@ mod tests {
     }
 
     macro_rules! fn_expr_stmt {
-        ($parameters:expr, $body:expr) => {
-            Statement::Expression(fn_expr!($parameters, $body))
+        ($parameters:expr, $($body:expr),*) => {
+            Statement::Expression(fn_expr!($parameters, $($body),*))
         };
     }
 
@@ -486,11 +536,16 @@ mod tests {
 
     #[test]
     fn test_let_statement() {
-        let expected_statements = vec![let_stmt!("x"), let_stmt!("y"), let_stmt!("foobar")];
+        let expected_statements = vec![
+            let_stmt!("x", integer_expr!(5)),
+            let_stmt!(
+                "y",
+                infix_expr!(integer_expr!(3), Infix::Asterisk, ident_expr!("a"))
+            ),
+        ];
         let input = "
 let x = 5;
-let y = 10;
-let foobar = 838383;
+let y = 3 * a;
 ";
         assert_statements(expected_statements, input);
     }
@@ -506,12 +561,15 @@ let foobar = 838383;
         let mut parser = Parser::new(lexer);
 
         parser.parse();
-        assert!(parser.errors().len() == 2, parser.errors().join(":"));
+        assert!(parser.errors().len() == 2, parser.errors().join(";"));
     }
 
     #[test]
     fn test_return_statement() {
-        let expected_statements = vec![ret_stmt!(), ret_stmt!()];
+        let expected_statements = vec![
+            ret_stmt!(integer_expr!(5)),
+            ret_stmt!(infix_expr!(ident_expr!("x"), Infix::Plus, ident_expr!("y"))),
+        ];
         let input = "
 return 5;
 return x+y;
@@ -680,7 +738,7 @@ if (x < y){
     #[test]
     fn test_fn_expression() {
         let expected_statements = vec![
-            fn_expr_stmt!(vec![], ident_expr!("x")),
+            fn_expr_stmt!(vec![], ident_expr!("y"), ident_expr!("x")),
             fn_expr_stmt!(
                 vec![ident!("x"), ident!("y")],
                 infix_expr!(ident_expr!("x"), Infix::Plus, ident_expr!("y"))
@@ -689,6 +747,7 @@ if (x < y){
 
         let input = "
 fn (){
+    y;
     x;
 }
 fn (x,y){
@@ -696,6 +755,32 @@ fn (x,y){
 }
 ";
 
+        assert_statements(expected_statements, input);
+    }
+
+    #[test]
+    fn test_call_expression() {
+        let expected_statements = vec![
+            Statement::Expression(call_expr!(
+                ident_expr!("add"),
+                integer_expr!(1),
+                integer_expr!(2)
+            )),
+            Statement::Expression(call_expr!(
+                ident_expr!("add"),
+                integer_expr!(1),
+                infix_expr!(integer_expr!(2), Infix::Asterisk, integer_expr!(3)),
+                call_expr!(
+                    ident_expr!("subtract"),
+                    infix_expr!(integer_expr!(4), Infix::Slash, ident_expr!("a"))
+                )
+            )),
+        ];
+
+        let input = "
+add(1, 2);
+add(1, 2 * 3, subtract(4 / a));
+";
         assert_statements(expected_statements, input);
     }
 }

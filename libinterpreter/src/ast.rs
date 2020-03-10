@@ -22,9 +22,8 @@ pub type BlockStatement = Vec<Statement>;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
-    None,
-    Let(Ident),
-    Return,
+    Let(Ident, Expression),
+    Return(Expression),
     Expression(Expression),
 }
 
@@ -32,6 +31,7 @@ pub enum Statement {
 pub struct Ident(pub String);
 
 pub type Identifiers = Vec<Ident>;
+pub type Arguments = Vec<Expression>;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
@@ -47,6 +47,10 @@ pub enum Expression {
     Function {
         parameters: Identifiers,
         body: BlockStatement,
+    },
+    Call {
+        function: Box<Expression>,
+        arguments: Arguments,
     },
 }
 
