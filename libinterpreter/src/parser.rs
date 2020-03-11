@@ -1,8 +1,5 @@
 use crate::{
-    ast::{
-        Arguments, BlockStatement, Expression, Ident, Identifiers, Infix, Literal, Prefix, Program,
-        Statement,
-    },
+    ast::{BlockStatement, Expression, Ident, Infix, Literal, Prefix, Program, Statement},
     lexer::Lexer,
     token::Token,
 };
@@ -36,7 +33,7 @@ fn get_precedence(token: &Token) -> Precedence {
 type ExpressionResult = Result<Expression, ()>;
 type StatementResult = Result<Statement, ()>;
 
-struct Parser<'a> {
+pub struct Parser<'a> {
     lexer: Lexer<'a>,
     current_token: Token,
     peek_token: Token,
@@ -44,7 +41,7 @@ struct Parser<'a> {
 }
 
 impl Parser<'_> {
-    fn new(mut lexer: Lexer) -> Parser {
+    pub fn new(mut lexer: Lexer) -> Parser {
         let current_token = lexer.next_token();
         let peek_token = lexer.next_token();
         Parser {
@@ -55,7 +52,7 @@ impl Parser<'_> {
         }
     }
 
-    fn parse(&mut self) -> Program {
+    pub fn parse(&mut self) -> Program {
         let mut program = Program::new();
         while self.current_token != Token::EndOfFile {
             match self.parse_statement() {
@@ -161,13 +158,6 @@ impl Parser<'_> {
         Ok(left_expression)
     }
 
-    fn parse_identifier(&mut self) -> ExpressionResult {
-        match &self.current_token {
-            Token::Ident(id) => Ok(Expression::Ident(Ident(id.clone()))),
-            _ => self.expression_error("identifier"),
-        }
-    }
-
     fn parse_prefix(&mut self) -> ExpressionResult {
         let prefix = match self.current_token {
             Token::Bang => Prefix::Bang,
@@ -261,7 +251,7 @@ impl Parser<'_> {
             return self.expression_error("fn lparen");
         }
 
-        let parameters = self.parse_parameters();
+        let parameters = self.parse_comma_separated(&Self::parse_fn_parameter);
 
         if !self.expect_peek(Token::LBrace) {
             return self.expression_error("fn lbrace");
@@ -272,30 +262,10 @@ impl Parser<'_> {
         Ok(Expression::Function { parameters, body })
     }
 
-    fn parse_parameters(&mut self) -> Identifiers {
-        let mut identifiers = vec![];
-
-        if self.peek_token == Token::RParen {
-            self.next_token();
-            return identifiers;
-        }
-
-        loop {
-            self.next_token();
-            match &self.current_token {
-                Token::Ident(id) => identifiers.push(Ident(id.clone())),
-                _ => (),
-            }
-            if self.peek_token != Token::Comma {
-                break;
-            }
-            self.next_token();
-        }
-
-        if !self.expect_peek(Token::RParen) {
-            vec![]
-        } else {
-            identifiers
+    fn parse_fn_parameter(&mut self) -> Result<Ident, ()> {
+        match &self.current_token {
+            Token::Ident(id) => Ok(Ident(id.clone())),
+            _ => Err(()),
         }
     }
 
@@ -315,22 +285,24 @@ impl Parser<'_> {
     fn parse_call_expression(&mut self, function: Expression) -> ExpressionResult {
         Ok(Expression::Call {
             function: Box::new(function),
-            arguments: self.parse_arguments(),
+            arguments: self.parse_comma_separated(&Self::parse_call_argument),
         })
     }
 
-    //TODO: combine with parse_parameters
-    fn parse_arguments(&mut self) -> Arguments {
-        let mut arguments = vec![];
-
+    fn parse_comma_separated<T, F>(&mut self, parse_fn: &F) -> Vec<T>
+    where
+        F: Fn(&mut Self) -> Result<T, ()>,
+    {
         if self.peek_token == Token::RParen {
             self.next_token();
-            return arguments;
+            return vec![];
         }
+
+        let mut values = vec![];
         loop {
             self.next_token();
-            match self.parse_expression(Precedence::Lowest) {
-                Ok(expression) => arguments.push(expression),
+            match parse_fn(self) {
+                Ok(value) => values.push(value),
                 _ => (),
             }
             if self.peek_token != Token::Comma {
@@ -342,7 +314,14 @@ impl Parser<'_> {
         if !self.expect_peek(Token::RParen) {
             vec![]
         } else {
-            arguments
+            values
+        }
+    }
+
+    fn parse_call_argument(&mut self) -> ExpressionResult {
+        match self.parse_expression(Precedence::Lowest) {
+            Ok(expression) => Ok(expression),
+            _ => Err(()),
         }
     }
 
@@ -368,7 +347,7 @@ impl Parser<'_> {
         get_precedence(&self.peek_token)
     }
 
-    fn errors(&self) -> Vec<String> {
+    pub fn errors(&self) -> Vec<String> {
         self.errors.clone()
     }
 

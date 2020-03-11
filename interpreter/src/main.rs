@@ -1,6 +1,7 @@
 use std::io;
 
 use libinterpreter::lexer::Lexer;
+use libinterpreter::parser::Parser;
 
 fn main() {
     start_repl();
@@ -19,8 +20,16 @@ fn start_repl() {
             break;
         }
         let lexer = Lexer::new(&input);
-        for token in lexer {
-            println!("{:?}", token);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+
+        if parser.errors().len() > 0 {
+            println!("ERRORS:");
+            println!("{:?}", parser.errors());
+        }
+
+        for statement in program.statements() {
+            println!("{:?}", statement);
         }
     }
 }
