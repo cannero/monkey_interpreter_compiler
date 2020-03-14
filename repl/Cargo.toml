@@ -1,5 +1,5 @@
 [package]
-name = "interpreter"
+name = "repl"
 version = "0.1.0"
 authors = ["cannero <serunmal@gmail.com>"]
 edition = "2018"
