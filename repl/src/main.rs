@@ -24,13 +24,13 @@ fn start_repl() {
         let mut parser = Parser::new(lexer);
         let program = parser.parse();
 
-        if parser.errors().len() > 0 {
+        if !parser.errors().is_empty() {
             println!("ERRORS:");
             println!("{:?}", parser.errors());
             continue;
         }
 
-        let evaluator = Evaluator::new();
+        let evaluator = Evaluator::default();
         println!("{:?}", evaluator.eval(program));
     }
 }

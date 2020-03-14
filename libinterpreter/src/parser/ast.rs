@@ -3,18 +3,20 @@ pub struct Program {
 }
 
 impl Program {
-    pub fn new() -> Program {
-        Program {
-            statements: Vec::new(),
-        }
-    }
-
-    pub fn statements(&self) -> &BlockStatement {
+    pub fn statements(&self) -> &[Statement] {
         &self.statements
     }
 
     pub fn push(&mut self, statement: Statement) {
         self.statements.push(statement);
+    }
+}
+
+impl Default for Program {
+    fn default() -> Self {
+        Program {
+            statements: Vec::new(),
+        }
     }
 }
 

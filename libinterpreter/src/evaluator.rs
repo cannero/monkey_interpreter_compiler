@@ -1,27 +1,24 @@
 mod object;
 use crate::{
     evaluator::object::Object,
-    parser::ast::{BlockStatement, Expression, Literal, Program, Statement},
+    parser::ast::{Expression, Literal, Program, Statement},
 };
 
+#[derive(Default)]
 pub struct Evaluator {}
 
 impl Evaluator {
-    pub fn new() -> Self {
-        Evaluator {}
-    }
-
     pub fn eval(&self, program: Program) -> Object {
         self.eval_statements(program.statements())
     }
 
-    fn eval_statements(&self, statements: &BlockStatement) -> Object {
+    fn eval_statements(&self, statements: &[Statement]) -> Object {
         self.eval_statement(&statements[0])
     }
 
     fn eval_statement(&self, statement: &Statement) -> Object {
         match statement {
-            &Statement::Expression(Expression::Literal(Literal::Integer(i))) => Object::Integer(i),
+            Statement::Expression(Expression::Literal(Literal::Integer(i))) => Object::Integer(*i),
             _ => Object::Integer(0),
         }
     }
@@ -41,7 +38,7 @@ mod tests {
             let lexer = Lexer::new(input);
             let mut parser = Parser::new(lexer);
             let program = parser.parse();
-            let evaluator = Evaluator::new();
+            let evaluator = Evaluator::default();
 
             let output = evaluator.eval(program);
 

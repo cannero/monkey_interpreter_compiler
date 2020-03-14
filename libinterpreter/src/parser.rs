@@ -55,7 +55,7 @@ impl Parser<'_> {
     }
 
     pub fn parse(&mut self) -> Program {
-        let mut program = Program::new();
+        let mut program = Program::default();
         while self.current_token != Token::EndOfFile {
             match self.parse_statement() {
                 Err(_) => (),
@@ -303,9 +303,8 @@ impl Parser<'_> {
         let mut values = vec![];
         loop {
             self.next_token();
-            match parse_fn(self) {
-                Ok(value) => values.push(value),
-                _ => (),
+            if let Ok(value) = parse_fn(self) {
+                values.push(value);
             }
             if self.peek_token != Token::Comma {
                 break;
@@ -498,7 +497,7 @@ mod tests {
     }
 
     fn assert_no_errors(parser: Parser) {
-        assert!(parser.errors().len() == 0, "{:?}", parser.errors());
+        assert!(parser.errors().is_empty(), "{:?}", parser.errors());
     }
 
     fn assert_statements(expected: BlockStatement, input: &str) {
