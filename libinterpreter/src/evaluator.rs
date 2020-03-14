@@ -4,14 +4,14 @@ use crate::{
     parser::ast::{BlockStatement, Expression, Literal, Program, Statement},
 };
 
-struct Evaluator {}
+pub struct Evaluator {}
 
 impl Evaluator {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Evaluator {}
     }
 
-    fn eval(&self, program: Program) -> Object {
+    pub fn eval(&self, program: Program) -> Object {
         self.eval_statements(program.statements())
     }
 
@@ -21,7 +21,7 @@ impl Evaluator {
 
     fn eval_statement(&self, statement: &Statement) -> Object {
         match statement {
-            Statement::Expression(Expression::Literal(Literal::Integer(i))) => Object::Integer(*i),
+            &Statement::Expression(Expression::Literal(Literal::Integer(i))) => Object::Integer(i),
             _ => Object::Integer(0),
         }
     }

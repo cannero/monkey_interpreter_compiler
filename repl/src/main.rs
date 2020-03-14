@@ -1,5 +1,6 @@
 use std::io;
 
+use libinterpreter::evaluator::Evaluator;
 use libinterpreter::lexer::Lexer;
 use libinterpreter::parser::Parser;
 
@@ -26,10 +27,10 @@ fn start_repl() {
         if parser.errors().len() > 0 {
             println!("ERRORS:");
             println!("{:?}", parser.errors());
+            continue;
         }
 
-        for statement in program.statements() {
-            println!("{:?}", statement);
-        }
+        let evaluator = Evaluator::new();
+        println!("{:?}", evaluator.eval(program));
     }
 }
