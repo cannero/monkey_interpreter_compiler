@@ -1,7 +1,9 @@
+mod ast;
+
 use crate::{
-    ast::{BlockStatement, Expression, Ident, Infix, Literal, Prefix, Program, Statement},
+    lexer::token::Token,
     lexer::Lexer,
-    token::Token,
+    parser::ast::{BlockStatement, Expression, Ident, Infix, Literal, Prefix, Program, Statement},
 };
 
 #[derive(PartialEq, PartialOrd)]

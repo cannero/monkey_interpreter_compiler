@@ -1,4 +1,6 @@
-use crate::token::Token;
+pub mod token;
+
+use crate::lexer::token::Token;
 use std::{iter::Peekable, str::Chars};
 
 fn is_identifier(ch: char) -> bool {
