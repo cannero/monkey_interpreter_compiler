@@ -1,4 +1,4 @@
-mod ast;
+pub mod ast;
 
 use crate::{
     lexer::token::Token,
@@ -501,7 +501,7 @@ mod tests {
         assert!(parser.errors().len() == 0, "{:?}", parser.errors());
     }
 
-    fn assert_statements(expected: Vec<Statement>, input: &str) {
+    fn assert_statements(expected: BlockStatement, input: &str) {
         let lexer = Lexer::new(input);
         let mut parser = Parser::new(lexer);
 

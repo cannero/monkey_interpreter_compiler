@@ -1,5 +1,5 @@
 pub struct Program {
-    statements: Vec<Statement>,
+    statements: BlockStatement,
 }
 
 impl Program {
@@ -9,7 +9,7 @@ impl Program {
         }
     }
 
-    pub fn statements(&self) -> &Vec<Statement> {
+    pub fn statements(&self) -> &BlockStatement {
         &self.statements
     }
 
