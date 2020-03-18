@@ -10,6 +10,8 @@ fn main() {
 
 fn start_repl() {
     println!("Enter code, empty line to quit.");
+    let mut evaluator = Evaluator::default();
+
     loop {
         let mut input = String::new();
         io::stdin()
@@ -30,7 +32,6 @@ fn start_repl() {
             continue;
         }
 
-        let evaluator = Evaluator::default();
-        println!("{:?}", evaluator.eval(program));
+        println!("{}", evaluator.eval(program));
     }
 }
